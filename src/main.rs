@@ -23,8 +23,8 @@ fn main() {
 
     let config = Config {
         camera: CameraConfig {
-            width: 480,
-            height: 320,
+            width: 720,
+            height: 480,
             fps: 25,
         },
     };
@@ -38,7 +38,7 @@ fn main() {
 
     // Создаем pipeline для вывода видео с параметрами YUY2 (480x320, 25 fps)
     let pipeline_str = format!(
-        "v4l2src device=/dev/video0 ! video/x-raw,format=YUY2,width={},height={},framerate={}/1 ! videoconvert ! video/x-raw,format=BGRA ! gtk4paintablesink name=sink1",
+        "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! jpegdec ! videoconvert ! video/x-raw,format=BGRA ! gtk4paintablesink name=sink1",
         config.camera.width, config.camera.height, config.camera.fps,
     );
     // Парсим строку pipeline и создаем объект pipeline
