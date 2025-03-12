@@ -3,6 +3,8 @@ use gstreamer::State;
 use gstreamer::prelude::{ElementExt as _, GstBinExt};
 use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button};
 use gtk4::{gdk, prelude::*};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 mod picture;
 
@@ -61,7 +63,6 @@ fn main() {
         let hbox = GtkBox::new(gtk4::Orientation::Horizontal, 5);
         hbox.set_halign(gtk4::Align::Center); // Выравниваем бокс по горизонтали по центру
         hbox.set_valign(gtk4::Align::Center); // Выравниваем бокс по вертикали по центру
-        //hbox.set_size_request(720, 480);
         hbox.add_css_class("screen_box");
 
         let vbox1 = GtkBox::new(gtk4::Orientation::Vertical, 5);
@@ -116,6 +117,72 @@ fn main() {
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
+
+        // Создаем RefCell для хранения дополнительного окна
+        let additional_window: Rc<RefCell<Option<ApplicationWindow>>> = Rc::new(RefCell::new(None));
+
+        // Обработчик события нажатия на кнопку button1
+        let additional_window_clone1 = additional_window.clone();
+        let app_clone = app.clone();
+        button1.connect_clicked(move |_| {
+            let mut additional_window = additional_window_clone1.borrow_mut();
+            if additional_window.is_none() {
+                let new_window = ApplicationWindow::new(&app_clone);
+                new_window.set_title(Some("Сканер Частоты"));
+                new_window.set_default_size(1024, 600);
+                new_window.show();
+
+                // Закрываем дополнительное окно при его закрытии
+                let additional_window_clone = additional_window_clone1.clone();
+                new_window.connect_close_request(move |_| {
+                    *additional_window_clone.borrow_mut() = None;
+                    false.into()
+                });
+                *additional_window = Some(new_window);
+            }
+        });
+
+        // Обработчик события нажатия на кнопку button2
+        let additional_window_clone2 = additional_window.clone();
+        let app_clone = app.clone();
+        button2.connect_clicked(move |_| {
+            let mut additional_window = additional_window_clone2.borrow_mut();
+            if additional_window.is_none() {
+                let new_window = ApplicationWindow::new(&app_clone);
+                new_window.set_title(Some("Ввод Позывного"));
+                new_window.set_default_size(1024, 600);
+                new_window.show();
+
+                // Закрываем дополнительное окно при его закрытии
+                let additional_window_clone = additional_window_clone2.clone();
+                new_window.connect_close_request(move |_| {
+                    *additional_window_clone.borrow_mut() = None;
+                    false.into()
+                });
+                *additional_window = Some(new_window);
+            }
+        });
+
+        // Обработчик события нажатия на кнопку button3
+        let additional_window_clone3 = additional_window.clone();
+        let app_clone = app.clone();
+        button3.connect_clicked(move |_| {
+            let mut additional_window = additional_window_clone3.borrow_mut();
+            if additional_window.is_none() {
+                let new_window = ApplicationWindow::new(&app_clone);
+                new_window.set_title(Some("Бинд Фраза"));
+                new_window.set_default_size(1024, 600);
+                new_window.show();
+
+                // Закрываем дополнительное окно при его закрытии
+                let additional_window_clone = additional_window_clone3.clone();
+                new_window.connect_close_request(move |_| {
+                    *additional_window_clone.borrow_mut() = None;
+                    false.into()
+                });
+                *additional_window = Some(new_window);
+            }
+        });
     });
 
     // Запускаем приложение
