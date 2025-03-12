@@ -33,7 +33,7 @@ fn main() {
 
     gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
 
-    // Создаем pipeline для вывода видео с параметрами YUY2 (480x320, 25 fps)
+    // Создаем pipeline для вывода видео с параметрами jpeg (720x480, 25 fps)
     let pipeline_str = format!(
         "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! jpegdec ! videoconvert ! video/x-raw,format=BGRA ! gtk4paintablesink name=sink1",
         config.camera.width, config.camera.height, config.camera.fps,
