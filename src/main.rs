@@ -1,9 +1,8 @@
 use gstreamer::Pipeline;
-use gstreamer::prelude::{ElementExt as _, GstBinExt};
-use gtk4::{Application, ApplicationWindow, Box as GtkBox};
-use gtk4::{gdk, prelude::*};
-use std::rc::Rc;
 use gstreamer::State;
+use gstreamer::prelude::{ElementExt as _, GstBinExt};
+use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button};
+use gtk4::{gdk, prelude::*};
 
 mod picture;
 
@@ -29,12 +28,10 @@ fn main() {
         },
     };
 
-
-
     // Инициализируем GStreamer
     gstreamer::init().unwrap();
 
-        gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
+    gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
 
     // Создаем pipeline для вывода видео с параметрами YUY2 (480x320, 25 fps)
     let pipeline_str = format!(
@@ -61,20 +58,60 @@ fn main() {
         window.set_default_size(1024, 600); // Устанавливаем размер окна по умолчанию
 
         // Создаем вертикальный бокс для размещения виджетов
-        let vbox = GtkBox::new(gtk4::Orientation::Vertical, 5);
-        vbox.set_halign(gtk4::Align::Center); // Выравниваем бокс по горизонтали по центру
-        vbox.set_valign(gtk4::Align::Center); // Выравниваем бокс по вертикали по центру
+        let hbox = GtkBox::new(gtk4::Orientation::Horizontal, 5);
+        hbox.set_halign(gtk4::Align::Center); // Выравниваем бокс по горизонтали по центру
+        hbox.set_valign(gtk4::Align::Center); // Выравниваем бокс по вертикали по центру
+        //hbox.set_size_request(720, 480);
+        hbox.add_css_class("screen_box");
 
-        // Создаем экземпляр структуры Picture и добавляем его в бокс
+        let vbox1 = GtkBox::new(gtk4::Orientation::Vertical, 5);
+        vbox1.set_hexpand(true);
+        vbox1.set_vexpand(true);
+
+        let vbox2 = GtkBox::new(gtk4::Orientation::Vertical, 5);
+        vbox2.set_hexpand(true);
+        vbox2.set_vexpand(true);
+        vbox2.set_size_request(720, 480);
+
+        let vbox3 = GtkBox::new(gtk4::Orientation::Vertical, 5);
+        vbox3.set_hexpand(true);
+        vbox3.set_vexpand(true);
+
+        // Создаем кнопки
+        let button1 = Button::with_label("Сканер Частоты");
+        let button2 = Button::with_label("Ввод Позывного");
+        let button3 = Button::with_label("  Бинд Фраза  ");
+        let button4 = Button::with_label(" Запись видео ");
+
+        // Устанавливаем кнопки для расширения и заполнения доступного пространства
+        button1.set_hexpand(true);
+        button1.set_vexpand(true);
+        button2.set_hexpand(true);
+        button2.set_vexpand(true);
+        button3.set_hexpand(true);
+        button3.set_vexpand(true);
+        button4.set_hexpand(true);
+        button4.set_vexpand(true);
+
+        // Создаем экземпляр структуры Picture
         let paintable = gtksink.property::<gdk::Paintable>("paintable");
         let picture = gtk4::Picture::new();
-
         picture.set_paintable(Some(&paintable));
 
-        vbox.append(&picture);
+        // Добавляем кнопки и картинку в горизонтальный бокс
+        vbox1.append(&button1);
+        vbox1.append(&button2);
+        vbox2.append(&picture);
+        vbox3.append(&button3);
+        vbox3.append(&button4);
+
+        // Добавляем горизонтальный бокс в вертикальный бокс
+        hbox.append(&vbox1);
+        hbox.append(&vbox2);
+        hbox.append(&vbox3);
 
         // Устанавливаем бокс как дочерний элемент окна
-        window.set_child(Some(&vbox));
+        window.set_child(Some(&hbox));
         window.show(); // Показываем окно
         pipeline
             .set_state(State::Playing)
