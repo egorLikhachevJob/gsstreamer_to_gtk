@@ -1,7 +1,8 @@
 use gstreamer::Pipeline;
 use gstreamer::State;
 use gstreamer::prelude::{ElementExt as _, GstBinExt};
-use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button};
+use gtk4::gdk::Display;
+use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider};
 use gtk4::{gdk, prelude::*};
 
 mod picture;
@@ -16,9 +17,20 @@ struct CameraConfig {
     fps: i32,
 }
 
+fn load_css() {
+    let provider = CssProvider::new();
+    provider.load_from_file(&gtk4::gio::File::for_path("src/style.css"));
+
+    gtk4::style_context_add_provider_for_display(
+        &Display::default().expect("Could not connect to a display."),
+        &provider,
+        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
+}
 fn main() {
     // Создаем новое приложение с уникальным идентификатором
     let app = Application::new(Some("com.example.MyGTKApp"), Default::default());
+    app.connect_startup(|_| load_css());
 
     let config = Config {
         camera: CameraConfig {
@@ -52,7 +64,7 @@ fn main() {
 
     // Устанавливаем обработчик события активации приложения
     app.connect_activate(move |app| {
-        // Создаем новое окно приложения
+        // Создаем новый окно приложения
         let window = ApplicationWindow::new(app);
         window.set_title(Some("My GTK App")); // Устанавливаем заголовок окна
         window.set_default_size(1024, 600); // Устанавливаем размер окна по умолчанию
@@ -61,7 +73,6 @@ fn main() {
         let hbox = GtkBox::new(gtk4::Orientation::Horizontal, 5);
         hbox.set_halign(gtk4::Align::Center); // Выравниваем бокс по горизонтали по центру
         hbox.set_valign(gtk4::Align::Center); // Выравниваем бокс по вертикали по центру
-        //hbox.set_size_request(720, 480);
         hbox.add_css_class("screen_box");
 
         let vbox1 = GtkBox::new(gtk4::Orientation::Vertical, 5);
@@ -81,7 +92,7 @@ fn main() {
         let button1 = Button::with_label("Сканер Частоты");
         let button2 = Button::with_label("Ввод Позывного");
         let button3 = Button::with_label("  Бинд Фраза  ");
-        let button4 = Button::with_label(" Запись видео ");
+        let button_rec = Button::with_label(" Запись видео ");
 
         // Устанавливаем кнопки для расширения и заполнения доступного пространства
         button1.set_hexpand(true);
@@ -90,8 +101,8 @@ fn main() {
         button2.set_vexpand(true);
         button3.set_hexpand(true);
         button3.set_vexpand(true);
-        button4.set_hexpand(true);
-        button4.set_vexpand(true);
+        button_rec.set_hexpand(true);
+        button_rec.set_vexpand(true);
 
         // Создаем экземпляр структуры Picture
         let paintable = gtksink.property::<gdk::Paintable>("paintable");
@@ -103,7 +114,7 @@ fn main() {
         vbox1.append(&button2);
         vbox2.append(&picture);
         vbox3.append(&button3);
-        vbox3.append(&button4);
+        vbox3.append(&button_rec);
 
         // Добавляем горизонтальный бокс в вертикальный бокс
         hbox.append(&vbox1);
@@ -113,6 +124,9 @@ fn main() {
         // Устанавливаем бокс как дочерний элемент окна
         window.set_child(Some(&hbox));
         window.show(); // Показываем окно
+
+        // Загружаем CSS стили из файла
+
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
