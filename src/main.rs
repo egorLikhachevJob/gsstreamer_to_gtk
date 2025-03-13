@@ -2,7 +2,8 @@ use gstreamer::Pipeline;
 use gstreamer::State;
 use gstreamer::prelude::{ElementExt as _, GstBinExt};
 use gtk4::gdk::Display;
-use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider};
+use gtk4::gdk::Texture;
+use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider, Picture};
 use gtk4::{gdk, prelude::*};
 
 mod picture;
@@ -27,6 +28,7 @@ fn load_css() {
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 }
+
 fn main() {
     // Создаем новое приложение с уникальным идентификатором
     let app = Application::new(Some("com.example.MyGTKApp"), Default::default());
@@ -106,17 +108,17 @@ fn main() {
 
         // Создаем экземпляр структуры Picture
         let paintable = gtksink.property::<gdk::Paintable>("paintable");
-        let picture = gtk4::Picture::new();
+        let picture = Picture::new();
         picture.set_paintable(Some(&paintable));
 
-        // Добавляем кнопки и картинку в горизонтальный бокс
+        // Добавляем кнопки и картинку в вертикальный бокс
         vbox1.append(&button1);
         vbox1.append(&button2);
         vbox2.append(&picture);
         vbox3.append(&button3);
         vbox3.append(&button_rec);
 
-        // Добавляем горизонтальный бокс в вертикальный бокс
+        // Добавляем вертикальный бокс в горизонтальный бокс
         hbox.append(&vbox1);
         hbox.append(&vbox2);
         hbox.append(&vbox3);
@@ -130,6 +132,17 @@ fn main() {
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
+
+        // Обработчик нажатия кнопки button1
+        button1.connect_clicked(move |_| {
+            let file = gtk4::gio::File::for_path("src/images/dog.jpg");
+            let texture = Texture::from_file(&file).expect("Failed to load image");
+            let new_picture = Picture::new();
+            new_picture.set_paintable(Some(&texture));
+            let _= vbox2.remove(&picture);
+            vbox2.append(&new_picture);
+            
+        });
     });
 
     // Запускаем приложение
