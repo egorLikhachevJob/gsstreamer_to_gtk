@@ -2,18 +2,55 @@
 
 window {
     background-color: #3e5879;
-    /* Кислотно-зеленый цвет */
+    border:1px solid white ;
+    border-radius: 5px;
+    border: 1px solid whitesmoke;
 }
 
 button {
     background-color: #415077;
-    color: #FFFFFF;
+    color: whitesmoke;
     padding: 10px;
     border-radius: 5px;
 }
 
 
+button:hover{
+    border: 1px solid whitesmoke;
+}
+
+button:active {
+    background-color: #344266;
+    box-shadow: 0 2px grey;
+    transform: translateY(2px);
+}
+
 picture {
     background-color: #3e5879;
     border-radius: 5px;
+    border: 1px solid whitesmoke;
+
+}
+
+.rec_btn{
+    
+    background-color: firebrick;
+    color: whitesmoke;
+}
+
+.rec_btn:hover {
+    background-color: firebrick;
+    color: white;
+}
+
+.keyboard-activating{
+    background-color: rgb(107, 20, 20);
+    box-shadow: 0 2px grey;
+    transform: translateY(2px);
+}
+
+.rec_btn:active {
+    background-color: rgb(107, 20, 20);
+    box-shadow: 0 2px grey;
+    transform: translateY(2px);
 }

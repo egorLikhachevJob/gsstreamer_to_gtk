@@ -2,9 +2,14 @@ use gstreamer::Pipeline;
 use gstreamer::State;
 use gstreamer::prelude::{ElementExt as _, GstBinExt};
 use gtk4::gdk::Display;
-use gtk4::gdk::Texture;
+use gtk4::glib;
+use crate::gdk::Texture;
 use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider, Picture};
 use gtk4::{gdk, prelude::*};
+use glib::timeout_add_local;
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
 
 mod picture;
 
@@ -69,7 +74,8 @@ fn main() {
         // Создаем новый окно приложения
         let window = ApplicationWindow::new(app);
         window.set_title(Some("My GTK App")); // Устанавливаем заголовок окна
-        window.set_default_size(1024, 600); // Устанавливаем размер окна по умолчанию
+        window.set_default_size(1024, 600); 
+        window.set_decorated(false);// Устанавливаем размер окна по умолчанию
 
         // Создаем вертикальный бокс для размещения виджетов
         let hbox = GtkBox::new(gtk4::Orientation::Horizontal, 5);
@@ -81,10 +87,10 @@ fn main() {
         vbox1.set_hexpand(true);
         vbox1.set_vexpand(true);
 
-        let vbox2 = GtkBox::new(gtk4::Orientation::Vertical, 5);
-        vbox2.set_hexpand(true);
-        vbox2.set_vexpand(true);
-        vbox2.set_size_request(720, 480);
+        let display_window = GtkBox::new(gtk4::Orientation::Vertical, 5);
+        display_window.set_hexpand(true);
+        display_window.set_vexpand(true);
+        display_window.set_size_request(720, 480);
 
         let vbox3 = GtkBox::new(gtk4::Orientation::Vertical, 5);
         vbox3.set_hexpand(true);
@@ -95,6 +101,7 @@ fn main() {
         let button2 = Button::with_label("Ввод Позывного");
         let button3 = Button::with_label("  Бинд Фраза  ");
         let button_rec = Button::with_label(" Запись видео ");
+        button_rec.add_css_class("rec_btn");
 
         // Устанавливаем кнопки для расширения и заполнения доступного пространства
         button1.set_hexpand(true);
@@ -114,34 +121,100 @@ fn main() {
         // Добавляем кнопки и картинку в вертикальный бокс
         vbox1.append(&button1);
         vbox1.append(&button2);
-        vbox2.append(&picture);
+        display_window.append(&picture);
         vbox3.append(&button3);
         vbox3.append(&button_rec);
 
         // Добавляем вертикальный бокс в горизонтальный бокс
         hbox.append(&vbox1);
-        hbox.append(&vbox2);
+        hbox.append(&display_window);
         hbox.append(&vbox3);
 
         // Устанавливаем бокс как дочерний элемент окна
         window.set_child(Some(&hbox));
         window.show(); // Показываем окно
 
-        // Загружаем CSS стили из файла
-
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
 
+        let picture = Rc::new(RefCell::new(picture));
+        let paintable = Rc::new(RefCell::new(paintable));
+
         // Обработчик нажатия кнопки button1
-        button1.connect_clicked(move |_| {
-            let file = gtk4::gio::File::for_path("src/images/dog.jpg");
-            let texture = Texture::from_file(&file).expect("Failed to load image");
-            let new_picture = Picture::new();
-            new_picture.set_paintable(Some(&texture));
-            let _= vbox2.remove(&picture);
-            vbox2.append(&new_picture);
-            
+        button1.connect_clicked({
+            let display_window = display_window.clone();
+            let picture = picture.clone();
+            move |_| {
+                println!("Button 1 clicked");
+                let file = gtk4::gio::File::for_path("src/images/dog.jpg");
+                let texture = Texture::from_file(&file).expect("Failed to load image");
+                let new_picture = Picture::new();
+                new_picture.set_paintable(Some(&texture));
+                let _ = display_window.remove(&*picture.borrow());
+                *picture.borrow_mut() = new_picture;
+                display_window.append(&*picture.borrow());
+            }
+        });
+
+        button2.connect_clicked({
+            let display_window = display_window.clone();
+            let picture = picture.clone();
+            move |_| {
+                println!("Button 2 clicked");
+                let file = gtk4::gio::File::for_path("src/images/cat.jpg");
+                let texture = Texture::from_file(&file).expect("Failed to load image");
+                let new_picture = Picture::new();
+                new_picture.set_paintable(Some(&texture));
+                let _ = display_window.remove(&*picture.borrow());
+                *picture.borrow_mut() = new_picture;
+                display_window.append(&*picture.borrow());
+            }
+        });
+
+        button3.connect_clicked({
+            let display_window = display_window.clone();
+            let picture = picture.clone();
+            move |_| {
+                println!("Button 3 clicked");
+                let file = gtk4::gio::File::for_path("src/images/tiger.jpg");
+                let texture = Texture::from_file(&file).expect("Failed to load image");
+                let new_picture = Picture::new();
+                new_picture.set_paintable(Some(&texture));
+                let _ = display_window.remove(&*picture.borrow());
+                *picture.borrow_mut() = new_picture;
+                display_window.append(&*picture.borrow());
+            }
+        });
+
+        // Обработчик нажатия кнопки button_rec
+        button_rec.connect_clicked({
+            let display_window = display_window.clone();
+            let picture = picture.clone();
+            let paintable = paintable.clone();
+            move |_| {
+                println!("Button rec clicked");
+                let file = gtk4::gio::File::for_path("src/images/racoon.jpg");
+                let texture = Texture::from_file(&file).expect("Failed to load image");
+                let new_picture = Picture::new();
+                new_picture.set_paintable(Some(&texture));
+                let _ = display_window.remove(&*picture.borrow());
+                *picture.borrow_mut() = new_picture;
+                display_window.append(&*picture.borrow());
+
+                // Запускаем таймер для восстановления исходной картинки через 1 секунду
+                let display_window = display_window.clone();
+                let picture = picture.clone();
+                let paintable = paintable.clone();
+                timeout_add_local(Duration::from_secs(1), move || {
+                    let _ = display_window.remove(&*picture.borrow());
+                    let new_picture = Picture::new();
+                    new_picture.set_paintable(Some(&*paintable.borrow()));
+                    *picture.borrow_mut() = new_picture;
+                    display_window.append(&*picture.borrow());
+                    glib::ControlFlow::Break // Исправлено здесь
+                });
+            }
         });
     });
 
