@@ -1,12 +1,13 @@
+use crate::gdk::Texture;
+use chrono::prelude::*;
+use glib::timeout_add_local;
 use gstreamer::Pipeline;
 use gstreamer::State;
 use gstreamer::prelude::{ElementExt as _, GstBinExt};
 use gtk4::gdk::Display;
 use gtk4::glib;
-use crate::gdk::Texture;
 use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider, Picture};
 use gtk4::{gdk, prelude::*};
-use glib::timeout_add_local;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -21,6 +22,7 @@ struct CameraConfig {
     width: i32,
     height: i32,
     fps: i32,
+    path: String,
 }
 
 fn load_css() {
@@ -44,6 +46,7 @@ fn main() {
             width: 720,
             height: 480,
             fps: 25,
+            path: String::from("src/media/"),
         },
     };
 
@@ -52,10 +55,15 @@ fn main() {
 
     gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
 
+    let now: DateTime<Local> = Local::now();
+    let formatted = now.format("%Y-%m-%d|%H:%M:%S");
+
     // Создаем pipeline для вывода видео с параметрами jpeg (720x480, 25 fps)
     let pipeline_str = format!(
-        "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! jpegdec ! videoconvert ! video/x-raw,format=BGRA ! gtk4paintablesink name=sink1",
-        config.camera.width, config.camera.height, config.camera.fps,
+        "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! tee name=t t. ! jpegdec ! videoconvert ! video/x-raw,format=BGRA 
+        ! queue ! gtk4paintablesink name=sink1 t. ! queue ! avimux 
+        ! filesink location={}{}.mp4",
+        config.camera.width, config.camera.height, config.camera.fps, config.camera.path, formatted,
     );
     // Парсим строку pipeline и создаем объект pipeline
     let pipeline =
@@ -74,8 +82,8 @@ fn main() {
         // Создаем новый окно приложения
         let window = ApplicationWindow::new(app);
         window.set_title(Some("My GTK App")); // Устанавливаем заголовок окна
-        window.set_default_size(1024, 600); 
-        window.set_decorated(false);// Устанавливаем размер окна по умолчанию
+        window.set_default_size(1024, 600);
+        window.set_decorated(false); // Устанавливаем размер окна по умолчанию
 
         // Создаем вертикальный бокс для размещения виджетов
         let hbox = GtkBox::new(gtk4::Orientation::Horizontal, 5);
@@ -137,6 +145,7 @@ fn main() {
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
+
 
         let picture = Rc::new(RefCell::new(picture));
         let paintable = Rc::new(RefCell::new(paintable));

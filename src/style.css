@@ -2,7 +2,7 @@
 
 window {
     background-color: #3e5879;
-    border:1px solid white ;
+    border: 1px solid white;
     border-radius: 5px;
     border: 1px solid whitesmoke;
 }
@@ -14,8 +14,7 @@ button {
     border-radius: 5px;
 }
 
-
-button:hover{
+button:hover {
     border: 1px solid whitesmoke;
 }
 
@@ -32,8 +31,8 @@ picture {
 
 }
 
-.rec_btn{
-    
+.rec_btn {
+
     background-color: firebrick;
     color: whitesmoke;
 }
@@ -43,7 +42,7 @@ picture {
     color: white;
 }
 
-.keyboard-activating{
+.keyboard-activating {
     background-color: rgb(107, 20, 20);
     box-shadow: 0 2px grey;
     transform: translateY(2px);
