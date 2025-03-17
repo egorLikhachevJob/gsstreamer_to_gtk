@@ -55,15 +55,15 @@ fn main() {
 
     gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
 
-    let now: DateTime<Local> = Local::now();
-    let formatted = now.format("%Y-%m-%d|%H:%M:%S");
+    let now = Utc::now();
+    let formatted_date_time = now.format("%Y-%m-%d|%H:%M:%S").to_string();
 
     // Создаем pipeline для вывода видео с параметрами jpeg (720x480, 25 fps)
     let pipeline_str = format!(
         "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! tee name=t t. ! jpegdec ! videoconvert ! video/x-raw,format=BGRA 
         ! queue ! gtk4paintablesink name=sink1 t. ! queue ! avimux 
         ! filesink location={}{}.mp4",
-        config.camera.width, config.camera.height, config.camera.fps, config.camera.path, formatted,
+        config.camera.width, config.camera.height, config.camera.fps, config.camera.path, formatted_date_time,
     );
     // Парсим строку pipeline и создаем объект pipeline
     let pipeline =
@@ -145,7 +145,6 @@ fn main() {
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
-
 
         let picture = Rc::new(RefCell::new(picture));
         let paintable = Rc::new(RefCell::new(paintable));

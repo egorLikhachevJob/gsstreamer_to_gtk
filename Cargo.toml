@@ -10,6 +10,8 @@ tokio = { version = "1", features = ["full"] }
 # gstreamer-app = "0.17.3"
 gstreamer-video = "0.23.5"
 gst-plugin-gtk4 = "0.13.5"
+chrono = "0.4"
+
 
 # [patch.crates-io]
 # gtk4 = { git = "https://github.com/gtk-rs/gtk4-rs", branch = "0.9" }
