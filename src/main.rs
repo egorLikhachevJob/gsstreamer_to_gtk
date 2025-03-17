@@ -11,6 +11,8 @@ use gtk4::{gdk, prelude::*};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
+use std::fs;
+use std::path::Path; 
 
 mod picture;
 
@@ -54,6 +56,12 @@ fn main() {
     gstreamer::init().unwrap();
 
     gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
+
+    // Проверяем и создаём директорию, если она не существует
+    let media_path = Path::new(&config.camera.path);
+    if !media_path.exists() {
+        fs::create_dir_all(media_path).expect("Failed to create media directory");
+    }
 
     let now = Utc::now();
     let formatted_date_time = now.format("%Y-%m-%d|%H:%M:%S").to_string();
