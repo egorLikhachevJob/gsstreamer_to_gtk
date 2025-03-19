@@ -258,6 +258,9 @@ fn main() {
         let button3 = Button::with_label("  Бинд Фраза  ");
         let button_rec = Button::with_label(" Запись видео ");
         button_rec.add_css_class("rec_btn");
+        button1.add_css_class("custom-button");
+        button2.add_css_class("custom-button");
+        button3.add_css_class("custom-button");        
 
         button1.set_hexpand(true);
         button1.set_vexpand(true);
