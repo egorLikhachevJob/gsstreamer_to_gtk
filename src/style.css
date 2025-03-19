@@ -54,12 +54,6 @@ picture {
     transform: translateY(2px);
 }
 
-.rec_btn {
-    background-color: #4CAF50;
-    color: white;
-    border-radius: 5px;
-}
-
 .rec_btn.recording {
     background-color: #ff4444;
     color: white;

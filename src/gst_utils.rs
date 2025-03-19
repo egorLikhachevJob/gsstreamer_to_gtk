@@ -2,7 +2,6 @@ use gstreamer::prelude::*;
 use gstreamer::{
     Bin, Bus, Element, MessageView, Pipeline, State,
 };
-use gstreamer::prelude::PadExtManual;
 use std::error::Error;
 
 /// Отключает ветку от tee
@@ -77,6 +76,7 @@ pub fn link_tee_branch(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn dispatch_messages(bus: &Bus, pipeline: &Pipeline) -> bool {
     while let Some(msg) = bus.pop() {
         match msg.view() {
