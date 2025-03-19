@@ -1,30 +1,110 @@
 use crate::gdk::Texture;
 use chrono::prelude::*;
 use glib::timeout_add_local;
+use gstreamer::Bin;
+use gstreamer::Element;
 use gstreamer::Pipeline;
 use gstreamer::State;
-use gstreamer::prelude::{ElementExt as _, GstBinExt};
+use gstreamer::prelude::{ElementExt as _, GstBinExt, PadExtManual};
 use gtk4::gdk::Display;
 use gtk4::glib;
 use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider, Picture};
 use gtk4::{gdk, prelude::*};
 use std::cell::RefCell;
+use std::fs;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
-use std::fs;
-use std::path::Path; 
 
+mod gst_utils;
 mod picture;
+
+use crate::gst_utils::{dispatch_messages, link_tee_branch, unlink_tee_branch};
 
 struct Config {
     camera: CameraConfig,
 }
 
+#[derive(Clone)]
 struct CameraConfig {
     width: i32,
     height: i32,
     fps: i32,
     path: String,
+}
+
+struct AppState {
+    pipeline: Pipeline,
+    tee: Element,
+    recording_branch: Option<Bin>,
+    is_recording: bool,
+}
+
+impl AppState {
+    fn new(pipeline: Pipeline) -> Self {
+        let tee = pipeline
+            .by_name("t")
+            .expect("Не удалось найти элемент tee в pipeline");
+
+        Self {
+            pipeline,
+            tee,
+            recording_branch: None,
+            is_recording: false,
+        }
+    }
+
+    fn start_recording(&mut self, file_path: &str) {
+        if self.is_recording {
+            return;
+        }
+
+        println!("Начинаем запись в файл: {}", file_path);
+
+        // Добавляем faststart для qtmux и async=false для filesink
+        let branch_str = format!(
+            "queue ! videoconvert ! x264enc tune=zerolatency speed-preset=medium bitrate=2000 ! video/x-h264,profile=high ! h264parse ! qtmux faststart=true ! filesink location={} async=false sync=false",
+            file_path
+        );
+
+        println!("Создаем branch с настройками: {}", branch_str);
+
+        match gstreamer::parse::bin_from_description(&branch_str, true) {
+            Ok(branch) => match link_tee_branch(&self.pipeline, &self.tee, &branch) {
+                Ok(_) => {
+                    println!("Branch успешно подключен");
+                    self.recording_branch = Some(branch);
+                    self.is_recording = true;
+                }
+                Err(e) => println!("Ошибка при подключении branch: {:?}", e),
+            },
+            Err(e) => println!("Ошибка создания branch: {:?}", e),
+        }
+    }
+
+    fn stop_recording(&mut self) {
+        if !self.is_recording {
+            return;
+        }
+
+        if let Some(branch) = self.recording_branch.take() {
+            if let Some(sink_pad) = branch.static_pad("sink") {
+                sink_pad.send_event(gstreamer::event::Eos::new());
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(1));
+
+            unlink_tee_branch(
+                &self.pipeline,
+                &self.tee,
+                &branch,
+                Box::new(|| {
+                    println!("Запись успешно остановлена");
+                }),
+            );
+        }
+        self.is_recording = false;
+    }
 }
 
 fn load_css() {
@@ -39,7 +119,6 @@ fn load_css() {
 }
 
 fn main() {
-    // Создаем новое приложение с уникальным идентификатором
     let app = Application::new(Some("com.example.MyGTKApp"), Default::default());
     app.connect_startup(|_| load_css());
 
@@ -52,51 +131,39 @@ fn main() {
         },
     };
 
-    // Инициализируем GStreamer
-    gstreamer::init().unwrap();
+    let camera_config = config.camera.clone();
 
+    gstreamer::init().expect("Не удалось инициализировать GStreamer");
     gstgtk4::plugin_register_static().expect("Failed to register gstgtk4 plugin");
 
-    // Проверяем и создаём директорию, если она не существует
     let media_path = Path::new(&config.camera.path);
     if !media_path.exists() {
         fs::create_dir_all(media_path).expect("Failed to create media directory");
     }
 
-    let now = Utc::now();
-    let formatted_date_time = now.format("%Y-%m-%d|%H:%M:%S").to_string();
-
-    // Создаем pipeline для вывода видео с параметрами jpeg (720x480, 25 fps)
     let pipeline_str = format!(
-        "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! tee name=t t. ! jpegdec ! videoconvert ! video/x-raw,format=BGRA 
-        ! queue ! gtk4paintablesink name=sink1 t. ! queue ! avimux 
-        ! filesink location={}{}.mp4",
-        config.camera.width, config.camera.height, config.camera.fps, config.camera.path, formatted_date_time,
+        "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! 
+        jpegdec ! videoconvert ! tee name=t allow-not-linked=true ! 
+        queue ! gtk4paintablesink name=sink1",
+        config.camera.width, config.camera.height, config.camera.fps
     );
-    // Парсим строку pipeline и создаем объект pipeline
-    let pipeline =
-        gstreamer::parse::launch(&pipeline_str).expect("Can not create GStreamer with pipeline");
-    let pipeline = pipeline
+
+    let pipeline = gstreamer::parse::launch(&pipeline_str)
+        .expect("Can not create GStreamer pipeline")
         .dynamic_cast::<Pipeline>()
-        .expect("Can not dynamic_cast pipeline");
+        .expect("Can not cast to Pipeline");
 
-    // Получаем элемент gtk4paintablesink из pipeline
-    let gtksink = pipeline
-        .by_name("sink1")
-        .expect("Can not get gtk4paintablesink element");
+    let pipeline_weak = pipeline.downgrade();
 
-    // Устанавливаем обработчик события активации приложения
     app.connect_activate(move |app| {
-        // Создаем новый окно приложения
         let window = ApplicationWindow::new(app);
-        window.set_title(Some("My GTK App")); // Устанавливаем заголовок окна
+        window.set_title(Some("My GTK App"));
         window.set_default_size(1024, 600);
-        window.set_decorated(false); // Устанавливаем размер окна по умолчанию
+        window.set_decorated(false);
 
-        // Создаем вертикальный бокс для размещения виджетов
         let hbox = GtkBox::new(gtk4::Orientation::Horizontal, 5);
-        hbox.set_halign(gtk4::Align::Center); // Выравниваем бокс по горизонтали по центру
-        hbox.set_valign(gtk4::Align::Center); // Выравниваем бокс по вертикали по центру
+        hbox.set_halign(gtk4::Align::Center);
+        hbox.set_valign(gtk4::Align::Center);
         hbox.add_css_class("screen_box");
 
         let vbox1 = GtkBox::new(gtk4::Orientation::Vertical, 5);
@@ -112,14 +179,12 @@ fn main() {
         vbox3.set_hexpand(true);
         vbox3.set_vexpand(true);
 
-        // Создаем кнопки
         let button1 = Button::with_label("Сканер Частоты");
         let button2 = Button::with_label("Ввод Позывного");
         let button3 = Button::with_label("  Бинд Фраза  ");
         let button_rec = Button::with_label(" Запись видео ");
         button_rec.add_css_class("rec_btn");
 
-        // Устанавливаем кнопки для расширения и заполнения доступного пространства
         button1.set_hexpand(true);
         button1.set_vexpand(true);
         button2.set_hexpand(true);
@@ -129,35 +194,33 @@ fn main() {
         button_rec.set_hexpand(true);
         button_rec.set_vexpand(true);
 
-        // Создаем экземпляр структуры Picture
+        let gtksink = pipeline
+            .by_name("sink1")
+            .expect("Can not get gtk4paintablesink element");
+
         let paintable = gtksink.property::<gdk::Paintable>("paintable");
         let picture = Picture::new();
         picture.set_paintable(Some(&paintable));
 
-        // Добавляем кнопки и картинку в вертикальный бокс
         vbox1.append(&button1);
         vbox1.append(&button2);
         display_window.append(&picture);
         vbox3.append(&button3);
         vbox3.append(&button_rec);
 
-        // Добавляем вертикальный бокс в горизонтальный бокс
         hbox.append(&vbox1);
         hbox.append(&display_window);
         hbox.append(&vbox3);
 
-        // Устанавливаем бокс как дочерний элемент окна
         window.set_child(Some(&hbox));
-        window.show(); // Показываем окно
+        window.show();
 
         pipeline
             .set_state(State::Playing)
             .expect("Unable to set the pipeline to the `Playing` state");
 
         let picture = Rc::new(RefCell::new(picture));
-        let paintable = Rc::new(RefCell::new(paintable));
 
-        // Обработчик нажатия кнопки button1
         button1.connect_clicked({
             let display_window = display_window.clone();
             let picture = picture.clone();
@@ -203,37 +266,45 @@ fn main() {
             }
         });
 
-        // Обработчик нажатия кнопки button_rec
-        button_rec.connect_clicked({
-            let display_window = display_window.clone();
-            let picture = picture.clone();
-            let paintable = paintable.clone();
-            move |_| {
-                println!("Button rec clicked");
-                let file = gtk4::gio::File::for_path("src/images/racoon.jpg");
-                let texture = Texture::from_file(&file).expect("Failed to load image");
-                let new_picture = Picture::new();
-                new_picture.set_paintable(Some(&texture));
-                let _ = display_window.remove(&*picture.borrow());
-                *picture.borrow_mut() = new_picture;
-                display_window.append(&*picture.borrow());
+        let app_state = Rc::new(RefCell::new(AppState::new(pipeline.clone())));
 
-                // Запускаем таймер для восстановления исходной картинки через 1 секунду
-                let display_window = display_window.clone();
-                let picture = picture.clone();
-                let paintable = paintable.clone();
-                timeout_add_local(Duration::from_secs(1), move || {
-                    let _ = display_window.remove(&*picture.borrow());
-                    let new_picture = Picture::new();
-                    new_picture.set_paintable(Some(&*paintable.borrow()));
-                    *picture.borrow_mut() = new_picture;
-                    display_window.append(&*picture.borrow());
-                    glib::ControlFlow::Break // Исправлено здесь
-                });
+        button_rec.connect_clicked({
+            let app_state = app_state.clone();
+            let camera_path = camera_config.path.clone();
+            move |button| {
+                let mut state = app_state.borrow_mut();
+                if !state.is_recording {
+                    let now = Utc::now();
+                    let file_path =
+                        format!("{}{}.mp4", camera_path, now.format("%Y-%m-%d|%H:%M:%S"));
+                    state.start_recording(&file_path);
+                    button.add_css_class("recording");
+                } else {
+                    state.stop_recording();
+                    button.remove_css_class("recording");
+                }
             }
+        });
+
+        let bus = pipeline.bus().expect("Не удалось получить шину pipeline");
+        let app_weak = app.downgrade();
+
+        let pipeline_weak = pipeline_weak.clone();
+        timeout_add_local(Duration::from_millis(100), move || {
+            let pipeline = match pipeline_weak.upgrade() {
+                Some(p) => p,
+                None => return glib::ControlFlow::Break,
+            };
+
+            if !dispatch_messages(&bus, &pipeline) {
+                if let Some(app) = app_weak.upgrade() {
+                    app.quit();
+                }
+                return glib::ControlFlow::Break;
+            }
+            glib::ControlFlow::Continue
         });
     });
 
-    // Запускаем приложение
     app.run();
 }

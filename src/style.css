@@ -53,3 +53,29 @@ picture {
     box-shadow: 0 2px grey;
     transform: translateY(2px);
 }
+
+.rec_btn {
+    background-color: #4CAF50;
+    color: white;
+    border-radius: 5px;
+}
+
+.rec_btn.recording {
+    background-color: #ff4444;
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
