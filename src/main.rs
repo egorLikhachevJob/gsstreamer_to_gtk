@@ -3,8 +3,10 @@ use chrono::prelude::*;
 use glib::timeout_add_local;
 use gstreamer::Bin;
 use gstreamer::Element;
+use gstreamer::Object;
 use gstreamer::Pipeline;
 use gstreamer::State;
+use gstreamer::prelude::*;
 use gstreamer::prelude::{ElementExt as _, GstBinExt, PadExtManual};
 use gtk4::gdk::Display;
 use gtk4::glib;
@@ -19,7 +21,7 @@ use std::time::Duration;
 mod gst_utils;
 mod picture;
 
-use crate::gst_utils::{dispatch_messages, link_tee_branch, unlink_tee_branch};
+use crate::gst_utils::{link_tee_branch, unlink_tee_branch};
 
 struct Config {
     camera: CameraConfig,
@@ -61,9 +63,11 @@ impl AppState {
 
         println!("Начинаем запись в файл: {}", file_path);
 
-        // Добавляем faststart для qtmux и async=false для filesink
+        // Обновленная строка для branch записи с улучшенными параметрами кодирования
         let branch_str = format!(
-            "queue ! videoconvert ! x264enc tune=zerolatency speed-preset=medium bitrate=2000 ! video/x-h264,profile=high ! h264parse ! qtmux faststart=true ! filesink location={} async=false sync=false",
+            "queue ! videoconvert ! x264enc tune=zerolatency speed-preset=superfast \
+            key-int-max=30 bitrate=2000 ! video/x-h264,profile=main ! mp4mux streamable=true \
+            fragment-duration=1 ! filesink location={} sync=false",
             file_path
         );
 
@@ -88,21 +92,40 @@ impl AppState {
         }
 
         if let Some(branch) = self.recording_branch.take() {
+            println!("Останавливаем запись...");
+
+            // Сначала отправляем EOS для branch записи
             if let Some(sink_pad) = branch.static_pad("sink") {
                 sink_pad.send_event(gstreamer::event::Eos::new());
             }
 
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            // Увеличиваем время ожидания для корректного завершения записи
+            std::thread::sleep(std::time::Duration::from_millis(500));
 
+            // Переводим branch в состояние NULL
+            let _ = branch.set_state(State::Null);
+
+            // Отключаем branch записи
             unlink_tee_branch(
                 &self.pipeline,
                 &self.tee,
                 &branch,
                 Box::new(|| {
-                    println!("Запись успешно остановлена");
+                    println!("Branch записи отключен");
                 }),
             );
+
+            // Перезапускаем pipeline
+            let _ = self.pipeline.set_state(State::Null);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let _ = self.pipeline.set_state(State::Playing);
+
+            // Ждем, пока pipeline действительно перейдет в состояние PLAYING
+            let _ = self.pipeline.state(gstreamer::ClockTime::from_seconds(1));
+
+            println!("Pipeline перезапущен");
         }
+
         self.is_recording = false;
     }
 }
@@ -116,6 +139,58 @@ fn load_css() {
         &provider,
         gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
+}
+
+fn handle_pipeline_messages(bus: &gstreamer::Bus, pipeline: &gstreamer::Pipeline) -> bool {
+    while let Some(msg) = bus.pop() {
+        match msg.view() {
+            gstreamer::MessageView::Error(err) => {
+                println!(
+                    "Error from {:?}: {} ({:?})",
+                    err.src().map(|s| s.name()),
+                    err.error(),
+                    err.debug()
+                );
+
+                // Проверяем, от какого элемента пришла ошибка
+                if let Some(src) = err.src() {
+                    // Игнорируем ошибки от элементов записи
+                    if src.name().as_str().starts_with("filesink")
+                        || src.name().as_str().starts_with("qtmux")
+                        || src.name().as_str().starts_with("x264enc")
+                        || src.name().as_str().starts_with("queue")
+                    {
+                        println!("Игнорируем ошибку от элемента: {}", src.name());
+                        return true;
+                    }
+                }
+
+                // Для других ошибок пытаемся восстановить pipeline
+                let _ = pipeline.set_state(State::Null);
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let _ = pipeline.set_state(State::Playing);
+                return true;
+            }
+            gstreamer::MessageView::StateChanged(state_changed) => {
+                // Логируем изменения состояния для отладки
+                if let Some(element) = state_changed.src() {
+                    println!(
+                        "State changed for {}: {:?} -> {:?}",
+                        element.name(),
+                        state_changed.old(),
+                        state_changed.current()
+                    );
+                }
+            }
+            gstreamer::MessageView::Eos(_) => {
+                // Игнорируем EOS от branch записи
+                println!("Получен EOS, игнорируем");
+                return true;
+            }
+            _ => (),
+        }
+    }
+    true
 }
 
 fn main() {
@@ -144,7 +219,8 @@ fn main() {
     let pipeline_str = format!(
         "v4l2src device=/dev/video0 ! image/jpeg,width={},height={},framerate={}/1 ! 
         jpegdec ! videoconvert ! tee name=t allow-not-linked=true ! 
-        queue ! gtk4paintablesink name=sink1",
+        queue max-size-buffers=2 leaky=downstream ! videoconvert ! 
+        gtk4paintablesink name=sink1 sync=false",
         config.camera.width, config.camera.height, config.camera.fps
     );
 
@@ -296,7 +372,7 @@ fn main() {
                 None => return glib::ControlFlow::Break,
             };
 
-            if !dispatch_messages(&bus, &pipeline) {
+            if !handle_pipeline_messages(&bus, &pipeline) {
                 if let Some(app) = app_weak.upgrade() {
                     app.quit();
                 }

@@ -64,6 +64,7 @@ picture {
     background-color: #ff4444;
     color: white;
     animation: pulse 1.5s infinite;
+    border: 1px solid whitesmoke;
 }
 
 @keyframes pulse {
