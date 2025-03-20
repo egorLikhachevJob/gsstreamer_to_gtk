@@ -8,15 +8,16 @@ use gstreamer::State;
 use gstreamer::prelude::*;
 use gtk4::gdk::Display;
 use gtk4::glib;
-use gtk4::{
-    Application, ApplicationWindow, Box as GtkBox, Button, CssProvider, Picture, Spinner,
-};
+use gtk4::{Application, ApplicationWindow, Box as GtkBox, Button, CssProvider, Picture, Spinner};
 use gtk4::{gdk, prelude::*};
 use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
+use gstreamer::glib::property::PropertySet;
 
 mod gst_utils;
 mod picture;
@@ -313,50 +314,114 @@ fn main() {
 
         let picture = Rc::new(RefCell::new(picture));
 
+        let spinner_active = Arc::new(AtomicBool::new(false));
+
+        // Добавляем структуру для хранения ID таймера
+        let timeout_id = Rc::new(RefCell::new(None::<glib::SourceId>));
+
         button1.connect_clicked({
             let display_window = display_window.clone();
             let picture = picture.clone();
-            move |_| {
+            let _button1 = button1.clone();
+            let button2 = button2.clone();
+            let button3 = button3.clone();
+            let button_rec = button_rec.clone();
+            let spinner_active = spinner_active.clone();
+            let timeout_id = timeout_id.clone();
+
+            move |button| {
+                if spinner_active.load(Ordering::SeqCst) {
+                    // Если нажата кнопка отмены
+                    if button.label().map_or(false, |l| l == "Отмена") {
+                        // Отменяем таймер если он существует
+                        if let Some(id) = timeout_id.take() {
+                            id.remove();
+                            timeout_id.set(None);
+                        }
+
+                        // Восстанавливаем интерфейс
+                        button.set_label("Сканер Частоты");
+                        button2.set_label("Ввод Позывного");
+                        button3.set_label("Бинд Фраза");
+                        button_rec.set_label("Запись видео");
+
+                        button2.set_sensitive(true);
+                        button3.set_sensitive(true);
+                        button_rec.set_sensitive(true);
+
+                        // Возвращаем картинку с камеры
+                        if let Some(spinner) = display_window.first_child() {
+                            display_window.remove(&spinner);
+                            display_window.append(&*picture.borrow());
+                        }
+
+                        spinner_active.store(false, Ordering::SeqCst);
+                    }
+                    return;
+                }
+
                 println!("Button 1 clicked");
 
-                // Сохраняем текущую картинку с камеры
+                spinner_active.store(true, Ordering::SeqCst);
+
                 let current_picture = picture.borrow().clone();
 
-                // Создаем контейнер для спиннера
+                button.set_label("Отмена");
+                button2.set_label("");
+                button3.set_label("");
+                button_rec.set_label("");
+
+                button2.set_sensitive(false);
+                button3.set_sensitive(false);
+                button_rec.set_sensitive(false);
+
                 let spinner_box = GtkBox::new(gtk4::Orientation::Vertical, 0);
                 spinner_box.set_hexpand(true);
                 spinner_box.set_vexpand(true);
                 spinner_box.set_halign(gtk4::Align::Center);
                 spinner_box.set_valign(gtk4::Align::Center);
 
-                // Создаем и настраиваем спиннер
                 let spinner = Spinner::new();
                 spinner.set_size_request(50, 50);
                 spinner.set_halign(gtk4::Align::Center);
                 spinner.set_valign(gtk4::Align::Center);
                 spinner.start();
 
-                // Добавляем спиннер в контейнер
                 spinner_box.append(&spinner);
 
-                // Удаляем картинку и показываем контейнер со спиннером
                 display_window.remove(&*picture.borrow());
                 display_window.append(&spinner_box);
 
-                // Клонируем необходимые переменные для таймера
                 let display_window = display_window.clone();
                 let picture = picture.clone();
+                let button = button.clone();
+                let button2 = button2.clone();
+                let button3 = button3.clone();
+                let button_rec = button_rec.clone();
+                let spinner_active = spinner_active.clone();
 
-                glib::timeout_add_local(Duration::from_secs(2), move || {
-                    // Удаляем контейнер со спиннером
+                // Сохраняем ID таймера
+                let source_id = glib::timeout_add_local(Duration::from_secs(2), move || {
                     display_window.remove(&spinner_box);
 
-                    // Возвращаем исходную картинку с камеры
                     *picture.borrow_mut() = current_picture.clone();
                     display_window.append(&*picture.borrow());
 
+                    button.set_label("Сканер Частоты");
+                    button2.set_label("Ввод Позывного");
+                    button3.set_label("Бинд Фраза");
+                    button_rec.set_label("Запись видео");
+
+                    button2.set_sensitive(true);
+                    button3.set_sensitive(true);
+                    button_rec.set_sensitive(true);
+
+                    spinner_active.store(false, Ordering::SeqCst);
+
                     glib::ControlFlow::Break
                 });
+
+                timeout_id.set(Some(source_id));
             }
         });
 
