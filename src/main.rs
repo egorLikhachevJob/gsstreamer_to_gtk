@@ -64,7 +64,7 @@ impl AppState {
         // Обновленная строка для branch записи с улучшенными параметрами кодирования
         let branch_str = format!(
             "queue ! videoconvert ! x264enc tune=zerolatency speed-preset=superfast \
-            key-int-max=30 bitrate=2000 ! video/x-h264,profile=main ! mp4mux streamable=true \
+            key-int-max=30 ! video/x-h264,profile=main ! mp4mux streamable=true \
             fragment-duration=1 ! filesink location={} sync=false",
             file_path
         );
@@ -255,12 +255,25 @@ fn main() {
 
         let button1 = Button::with_label("Сканер Частоты");
         let button2 = Button::with_label("Ввод Позывного");
-        let button3 = Button::with_label("  Бинд Фраза  ");
-        let button_rec = Button::with_label(" Запись видео ");
+        let button3 = Button::with_label("Бинд Фраза");
+        let button_rec = Button::with_label("Запись видео");
+
+        // Устанавливаем фиксированный размер для всех кнопок
+        button1.set_size_request(120, 80);
+        button2.set_size_request(120, 80);
+        button3.set_size_request(120, 80);
+        button_rec.set_size_request(120, 80);
+
+        // Добавляем дополнительный CSS класс для фиксированной ширины
+        button1.add_css_class("fixed-width");
+        button2.add_css_class("fixed-width");
+        button3.add_css_class("fixed-width");
+        button_rec.add_css_class("fixed-width");
+
         button_rec.add_css_class("rec_btn");
         button1.add_css_class("custom-button");
         button2.add_css_class("custom-button");
-        button3.add_css_class("custom-button");        
+        button3.add_css_class("custom-button");
 
         button1.set_hexpand(true);
         button1.set_vexpand(true);
@@ -356,9 +369,11 @@ fn main() {
                         format!("{}{}.mp4", camera_path, now.format("%Y-%m-%d|%H:%M:%S"));
                     state.start_recording(&file_path);
                     button.add_css_class("recording");
+                    button.set_label("Стоп запись");
                 } else {
                     state.stop_recording();
                     button.remove_css_class("recording");
+                    button.set_label("Запись видео");
                 }
             }
         });

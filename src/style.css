@@ -93,3 +93,7 @@ picture {
     background: linear-gradient(to bottom, #c0392b, #e74c3c);
 }
 
+.fixed-width {
+    min-width: 120px;
+    
+}
