@@ -382,7 +382,7 @@ fn main() {
                 spinner_box.set_valign(gtk4::Align::Center);
 
                 let spinner = Spinner::new();
-                spinner.set_size_request(50, 50);
+                spinner.set_size_request(100, 100);
                 spinner.set_halign(gtk4::Align::Center);
                 spinner.set_valign(gtk4::Align::Center);
                 spinner.start();
